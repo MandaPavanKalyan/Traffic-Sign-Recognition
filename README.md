@@ -1,7 +1,8 @@
-# Leaf Disease Detection Deep Learning
+# Traffic Sign Classification using Deep Learning (DL)
+
 ## Abstract
 
-The proposed decision-making system utilizes image content characterization and a supervised classifier type of neural network. Image processing techniques for this kind of decision analysis involve preprocessing, feature extraction, and classification stages. During preprocessing, resize, color, and texture features are extracted from an input for training. The system will be used to classify the test images automatically to decide leaf characteristics.
+The proposed decision-making system utilizes image content characterization and a supervised classifier type of neural network. Image processing techniques for this kind of decision analysis involve preprocessing, feature extraction, and classification stages. During preprocessing, resize, color, and texture features are extracted from an input for training. The system will be used to classify the test images automatically to decide traffic sign characteristics.
 
 ## Scope of the Project
 
@@ -12,14 +13,14 @@ The proposed decision-making system utilizes image content characterization and 
 
 ## Working Model
 
-In this model, the image is fed into the convolutional neural network (CNN) with a size of 128x128 and three color channels. The first convolutional layer (Conv2D) applies 32 filters to find features and create a feature map. After that, the ReLU activation function is applied to remove non-linearity. Batch normalization is then applied to normalize the weights of neurons. The feature map is then fed into a max-pooling layer, which extracts the most relevant features. This process is repeated with additional Conv2D and max-pooling layers. The output of these layers is then fed into a fully connected layer (linear layer). Finally, the output layer predicts 25 categories.
+In this model, the images are fed into a convolutional neural network (CNN) with a size of 30x30 and three color channels. The CNN consists of multiple convolutional layers with ReLU activation functions, followed by max-pooling layers and dropout for regularization. The output is then fed into fully connected layers, and the final layer uses softmax activation to predict 43 categories of traffic signs.
 
 ## Installation
 
 Ensure you have Python installed (>=3.6). Install the required dependencies:
 
 ```sh
-pip install numpy tensorflow matplotlib
+pip install numpy pandas matplotlib tensorflow pillow scikit-learn keras
 ```
 
 ## Usage
@@ -35,69 +36,111 @@ pip install numpy tensorflow matplotlib
 
 Here is an example of the complete code:
 
-```python
+```python name=traffic_sign_classifier.py
 import numpy as np
-from tensorflow.keras.models import Sequential 
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, BatchNormalization
+import pandas as pd
 import matplotlib.pyplot as plt
-import random
+import tensorflow as tf 
+from PIL import Image
+import os 
+from sklearn.model_selection import train_test_split 
+from keras.utils import to_categorical 
+from keras.models import Sequential 
+from keras.layers import Conv2D, MaxPool2D, Dense, Flatten, Dropout
 
 # Load Data
-x_train = np.loadtxt('input.csv', delimiter=',')
-y_train = np.loadtxt('labels.csv', delimiter=',')
-x_test = np.loadtxt('input_test.csv', delimiter=',')
-y_test = np.loadtxt('labels_test.csv', delimiter=',')
+data = []
+labels = []
+classes = 43 
+cur_path = os.getcwd() 
+for i in range(classes): 
+    path = os.path.join(cur_path, 'train', str(i)) 
+    images = os.listdir(path) 
+    for a in images:
+        try:
+            image = Image.open(path + '/' + a) 
+            image = image.resize((30, 30)) 
+            image = np.array(image) 
+            data.append(image) 
+            labels.append(i) 
+        except: 
+            print("Error loading image") 
+data = np.array(data)
+labels = np.array(labels)
+print(data.shape, labels.shape)
 
-# Reshape and Normalize Data
-x_train = x_train.reshape(len(x_train), 128, 128, 3)
-y_train = y_train.reshape(len(y_train), 1)
-x_test = x_test.reshape(len(x_test), 128, 128, 3)
-y_test = y_test.reshape(len(y_test), 1)
-x_train = x_train / 255
-x_test = x_test / 255
+# Splitting training and testing dataset
+X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2, random_state=42)
+print(X_train.shape, X_test.shape, y_train.shape, y_test.shape)
 
-# Print Data Shapes
-print("shape of x_train: ", x_train.shape)
-print("shape of y_train: ", y_train.shape)
-print("shape of x_test: ", x_test.shape)
-print("shape of y_test: ", y_test.shape)
+# Converting the labels into one hot encoding
+y_train = to_categorical(y_train, 43)
+y_test = to_categorical(y_test, 43)
 
-# Build and Compile Model
-model = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(128, 128, 3)),
-    BatchNormalization(),
-    MaxPooling2D((2, 2)),
-    Conv2D(32, (3, 3), activation='relu'),
-    BatchNormalization(),
-    MaxPooling2D((2, 2)),
-    Flatten(),
-    Dense(64, activation='relu'),
-    Dense(25, activation='softmax')
-])
-model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+# CNN model building
+model = Sequential()
+model.add(Conv2D(filters=32, kernel_size=(5,5), activation='relu', input_shape=X_train.shape[1:]))
+model.add(Conv2D(filters=32, kernel_size=(5,5), activation='relu'))
+model.add(MaxPool2D(pool_size=(2, 2)))
+model.add(Dropout(rate=0.25))
+model.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+model.add(Conv2D(filters=64, kernel_size=(3, 3), activation='relu'))
+model.add(MaxPool2D(pool_size=(2, 2)))
+model.add(Dropout(rate=0.25))
+model.add(Flatten())
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(rate=0.5))
+model.add(Dense(43, activation='softmax'))
 
-# Train Model
-model.fit(x_train, y_train, epochs=5, batch_size=64)
+# Compilation of the model
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-# Evaluate Model
-model.evaluate(x_test, y_test)
+# Training the model
+history = model.fit(X_train, y_train, batch_size=32, epochs=15, validation_data=(X_test, y_test))
+model.save("traffic_classifier.h5")
 
-# Make Predictions
-idx = random.randint(0, len(y_test))
-plt.imshow(x_test[idx, :])
+# Plotting graphs for accuracy
+plt.figure(0)
+plt.plot(history.history['accuracy'], label='training accuracy')
+plt.plot(history.history['val_accuracy'], label='validation accuracy')
+plt.title('Accuracy')
+plt.xlabel('epochs')
+plt.ylabel('accuracy')
+plt.legend()
 plt.show()
 
-y_pred = model.predict(x_test[idx, :].reshape(1, 128, 128, 3))
-print(y_pred)
+# Plotting graphs for loss
+plt.figure(1)
+plt.plot(history.history['loss'], label='training loss')
+plt.plot(history.history['val_loss'], label='validation loss')
+plt.title('Loss')
+plt.xlabel('epochs')
+plt.ylabel('loss')
+plt.legend()
+plt.show()
 
-pred_class = np.argmax(y_pred)
-print(f"Our model says it is a class: {pred_class}")
+# Evaluating the model on test data
+y_test = pd.read_csv('Test.csv')
+labels = y_test["ClassId"].values
+imgs = y_test["Path"].values
+data = []
+for img in imgs:
+    image = Image.open(img)
+    image = image.resize((30, 30))
+    data.append(np.array(image))
+X_test = np.array(data)
+pred = model.predict_classes(X_test)
+
+# Accuracy with the test data
+from sklearn.metrics import accuracy_score
+print(accuracy_score(labels, pred))
+model.save('traffic_classifier.h5')
 ```
 
 ## Future Enhancements
 
 - Improve model accuracy with more complex architectures.
-- Add support for more leaf categories.
+- Add support for more traffic sign categories.
 - Implement data augmentation for better generalization.
 - Integrate visualization tools for model performance.
 
